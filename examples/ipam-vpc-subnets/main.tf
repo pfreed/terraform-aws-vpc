@@ -2,19 +2,11 @@ provider "aws" {
   region = local.region
 }
 
-# Provider alias for IPAM resources (when IPAM is in a different region)
-# This is required when vpc_ipam_pool_region is set
-provider "aws" {
-  alias  = "ipam"
-  region = local.ipam_region
-}
-
 data "aws_availability_zones" "available" {}
 
 locals {
-  name        = "ex-${basename(path.cwd)}"
-  region      = "eu-west-2"  # VPC region
-  ipam_region = "eu-west-1"  # IPAM region (best practice: IPAM in home region)
+  name   = "ex-${basename(path.cwd)}"
+  region = "eu-west-2" # VPC and IPAM region
 
   azs = slice(data.aws_availability_zones.available.names, 0, 3)
 
@@ -29,13 +21,16 @@ locals {
 # VPC Module with IPAM Pool for Subnet Planning
 ################################################################################
 
+# This example demonstrates the native Terraform resource approach for IPAM:
+# 1. VPC-scoped IPAM pool using aws_vpc_ipam_pool with source_resource block
+# 2. IPAM-allocated subnets using per-type netmask length variables
+# 3. RAM sharing for cross-account access using native aws_ram_* resources
+#
+# By using the per-subnet-type IPAM netmask length variables, subnets get all
+# associated resources (route tables, NACLs, NAT routes, etc.) automatically.
+
 module "vpc" {
   source = "../.."
-
-  providers = {
-    aws      = aws
-    aws.ipam = aws.ipam
-  }
 
   name = local.name
 
@@ -45,97 +40,32 @@ module "vpc" {
   ipv4_netmask_length = 16
 
   azs = local.azs
-  
-  # Don't create traditional subnets - all subnets will come from IPAM pool
-  private_subnets = []
-  public_subnets  = []
+
+  # IPAM-allocated subnets - just specify netmask lengths per type.
+  # The number of entries controls how many subnets are created (mapped to AZs).
+  # CIDRs are automatically allocated from the internal VPC IPAM pool.
+  private_subnet_ipam_netmask_lengths = [24, 24, 24] # 3 private /24 subnets
+  public_subnet_ipam_netmask_lengths  = [24, 24, 24] # 3 public /24 subnets
 
   enable_nat_gateway = false
   enable_vpn_gateway = false
 
   # Enable VPC IPAM Pool for subnet planning (VPC-specific pool)
-  create_vpc_ipam_pool    = true
-  vpc_ipam_pool_region    = local.ipam_region  # Where IPAM resources are created
-  vpc_ipam_scope_id       = aws_vpc_ipam.this.private_default_scope_id
-  vpc_ipam_pool_locale    = local.region       # Where the pool operates (must match VPC region)
+  create_vpc_ipam_pool = true
+  vpc_ipam_scope_id    = aws_vpc_ipam.this.private_default_scope_id
+  vpc_ipam_pool_locale = local.region
 
   # Source pool to allocate from (the top-level IPAM pool)
   vpc_ipam_source_pool_id = aws_vpc_ipam_pool.top_level.id
-
-  # For cross-account setups, specify AWS profiles:
-  # vpc_ipam_pool_aws_profile = "ipam-account-profile"  # Profile for IPAM account
-  # vpc_aws_profile           = "vpc-account-profile"   # Profile for VPC account
-
-  # vpc_ipam_pool_cidr is optional - if not provided, will use the VPC's CIDR
-  # (which was allocated from the top-level IPAM pool in this case)
 
   # Configure allocation constraints for subnets
   vpc_ipam_pool_allocation_default_netmask_length = 24
   vpc_ipam_pool_allocation_min_netmask_length     = 24
   vpc_ipam_pool_allocation_max_netmask_length     = 20
 
-  # Enable RAM sharing
+  # Enable RAM sharing for cross-account access
   vpc_ipam_pool_ram_share_enabled    = true
   vpc_ipam_pool_ram_share_principals = var.ram_share_principals
-
-  # Create subnets using IPAM pool allocation
-  # All subnets are created from the VPC-specific IPAM pool with auto-allocated CIDRs
-  ipam_subnets = [
-    {
-      name              = "${local.name}-private-subnet-1"
-      availability_zone = "${local.region}a"
-      netmask_length    = 24  # /24 for private subnets
-      tags = {
-        Type = "private"
-        Tier = "application"
-      }
-    },
-    {
-      name              = "${local.name}-private-subnet-2"
-      availability_zone = "${local.region}b"
-      netmask_length    = 24
-      tags = {
-        Type = "private"
-        Tier = "application"
-      }
-    },
-    {
-      name              = "${local.name}-private-subnet-3"
-      availability_zone = "${local.region}c"
-      netmask_length    = 24
-      tags = {
-        Type = "private"
-        Tier = "application"
-      }
-    },
-    {
-      name              = "${local.name}-public-subnet-1"
-      availability_zone = "${local.region}a"
-      netmask_length    = 24  # /24 for public subnets
-      tags = {
-        Type = "public"
-        Tier = "web"
-      }
-    },
-    {
-      name              = "${local.name}-public-subnet-2"
-      availability_zone = "${local.region}b"
-      netmask_length    = 24
-      tags = {
-        Type = "public"
-        Tier = "web"
-      }
-    },
-    {
-      name              = "${local.name}-public-subnet-3"
-      availability_zone = "${local.region}c"
-      netmask_length    = 24
-      tags = {
-        Type = "public"
-        Tier = "web"
-      }
-    }
-  ]
 
   tags = local.tags
 
@@ -148,10 +78,9 @@ module "vpc" {
 # Supporting IPAM Resources
 ################################################################################
 
-# Top-level IPAM (created in IPAM region)
+# Top-level IPAM (created in same region as VPC)
+# This is the organization-wide or account-wide IPAM instance
 resource "aws_vpc_ipam" "this" {
-  provider = aws.ipam
-
   description = "IPAM for ${local.name}"
 
   operating_regions {
@@ -162,14 +91,13 @@ resource "aws_vpc_ipam" "this" {
 }
 
 # Top-level IPAM Pool (organization-wide or account-wide)
-# Created in IPAM region with locale set to where it operates
+# Created in same region with locale set to where it operates
+# This pool serves as the source for VPC-scoped IPAM pools
 resource "aws_vpc_ipam_pool" "top_level" {
-  provider = aws.ipam
-
   description                       = "Top-level IPv4 pool"
   address_family                    = "ipv4"
   ipam_scope_id                     = aws_vpc_ipam.this.private_default_scope_id
-  locale                            = local.region  # Where the pool operates (VPC region)
+  locale                            = local.region # Where the pool operates (VPC region)
   allocation_default_netmask_length = 16
 
   tags = merge(
@@ -181,9 +109,8 @@ resource "aws_vpc_ipam_pool" "top_level" {
 }
 
 # Provision CIDR to top-level pool
+# This makes the CIDR range available for allocation to VPC-scoped pools
 resource "aws_vpc_ipam_pool_cidr" "top_level" {
-  provider = aws.ipam
-
   ipam_pool_id = aws_vpc_ipam_pool.top_level.id
   cidr         = "10.0.0.0/8"
 }

@@ -1,11 +1,19 @@
 locals {
-  len_public_subnets      = max(length(var.public_subnets), length(var.public_subnet_ipv6_prefixes))
-  len_private_subnets     = max(length(var.private_subnets), length(var.private_subnet_ipv6_prefixes))
-  len_database_subnets    = max(length(var.database_subnets), length(var.database_subnet_ipv6_prefixes))
-  len_elasticache_subnets = max(length(var.elasticache_subnets), length(var.elasticache_subnet_ipv6_prefixes))
-  len_redshift_subnets    = max(length(var.redshift_subnets), length(var.redshift_subnet_ipv6_prefixes))
-  len_intra_subnets       = max(length(var.intra_subnets), length(var.intra_subnet_ipv6_prefixes))
+  len_public_subnets      = max(length(var.public_subnets), length(var.public_subnet_ipv6_prefixes), length(var.public_subnet_ipam_netmask_lengths))
+  len_private_subnets     = max(length(var.private_subnets), length(var.private_subnet_ipv6_prefixes), length(var.private_subnet_ipam_netmask_lengths))
+  len_database_subnets    = max(length(var.database_subnets), length(var.database_subnet_ipv6_prefixes), length(var.database_subnet_ipam_netmask_lengths))
+  len_elasticache_subnets = max(length(var.elasticache_subnets), length(var.elasticache_subnet_ipv6_prefixes), length(var.elasticache_subnet_ipam_netmask_lengths))
+  len_redshift_subnets    = max(length(var.redshift_subnets), length(var.redshift_subnet_ipv6_prefixes), length(var.redshift_subnet_ipam_netmask_lengths))
+  len_intra_subnets       = max(length(var.intra_subnets), length(var.intra_subnet_ipv6_prefixes), length(var.intra_subnet_ipam_netmask_lengths))
   len_outpost_subnets     = max(length(var.outpost_subnets), length(var.outpost_subnet_ipv6_prefixes))
+
+  # Per-subnet-type IPAM flags - true when using the internal VPC IPAM pool
+  use_ipam_public      = local.create_vpc_ipam_pool && length(var.public_subnet_ipam_netmask_lengths) > 0
+  use_ipam_private     = local.create_vpc_ipam_pool && length(var.private_subnet_ipam_netmask_lengths) > 0
+  use_ipam_database    = local.create_vpc_ipam_pool && length(var.database_subnet_ipam_netmask_lengths) > 0
+  use_ipam_redshift    = local.create_vpc_ipam_pool && length(var.redshift_subnet_ipam_netmask_lengths) > 0
+  use_ipam_elasticache = local.create_vpc_ipam_pool && length(var.elasticache_subnet_ipam_netmask_lengths) > 0
+  use_ipam_intra       = local.create_vpc_ipam_pool && length(var.intra_subnet_ipam_netmask_lengths) > 0
 
   max_subnet_length = max(
     local.len_private_subnets,
@@ -150,7 +158,9 @@ resource "aws_subnet" "public" {
   assign_ipv6_address_on_creation                = var.enable_ipv6 && var.public_subnet_ipv6_native ? true : var.public_subnet_assign_ipv6_address_on_creation
   availability_zone                              = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) > 0 ? element(var.azs, count.index) : null
   availability_zone_id                           = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
-  cidr_block                                     = var.public_subnet_ipv6_native ? null : element(concat(var.public_subnets, [""]), count.index)
+  cidr_block                                     = local.use_ipam_public ? null : (var.public_subnet_ipv6_native ? null : element(concat(var.public_subnets, [""]), count.index))
+  ipv4_ipam_pool_id                              = local.use_ipam_public ? local.vpc_ipam_pool_id_for_subnets : null
+  ipv4_netmask_length                            = local.use_ipam_public ? var.public_subnet_ipam_netmask_lengths[count.index] : null
   enable_dns64                                   = var.enable_ipv6 && var.public_subnet_enable_dns64
   enable_resource_name_dns_aaaa_record_on_launch = var.enable_ipv6 && var.public_subnet_enable_resource_name_dns_aaaa_record_on_launch
   enable_resource_name_dns_a_record_on_launch    = !var.public_subnet_ipv6_native && var.public_subnet_enable_resource_name_dns_a_record_on_launch
@@ -298,7 +308,9 @@ resource "aws_subnet" "private" {
   assign_ipv6_address_on_creation                = var.enable_ipv6 && var.private_subnet_ipv6_native ? true : var.private_subnet_assign_ipv6_address_on_creation
   availability_zone                              = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) > 0 ? element(var.azs, count.index) : null
   availability_zone_id                           = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
-  cidr_block                                     = var.private_subnet_ipv6_native ? null : element(concat(var.private_subnets, [""]), count.index)
+  cidr_block                                     = local.use_ipam_private ? null : (var.private_subnet_ipv6_native ? null : element(concat(var.private_subnets, [""]), count.index))
+  ipv4_ipam_pool_id                              = local.use_ipam_private ? local.vpc_ipam_pool_id_for_subnets : null
+  ipv4_netmask_length                            = local.use_ipam_private ? var.private_subnet_ipam_netmask_lengths[count.index] : null
   enable_dns64                                   = var.enable_ipv6 && var.private_subnet_enable_dns64
   enable_resource_name_dns_aaaa_record_on_launch = var.enable_ipv6 && var.private_subnet_enable_resource_name_dns_aaaa_record_on_launch
   enable_resource_name_dns_a_record_on_launch    = !var.private_subnet_ipv6_native && var.private_subnet_enable_resource_name_dns_a_record_on_launch
@@ -430,7 +442,9 @@ resource "aws_subnet" "database" {
   assign_ipv6_address_on_creation                = var.enable_ipv6 && var.database_subnet_ipv6_native ? true : var.database_subnet_assign_ipv6_address_on_creation
   availability_zone                              = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) > 0 ? element(var.azs, count.index) : null
   availability_zone_id                           = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
-  cidr_block                                     = var.database_subnet_ipv6_native ? null : element(concat(var.database_subnets, [""]), count.index)
+  cidr_block                                     = local.use_ipam_database ? null : (var.database_subnet_ipv6_native ? null : element(concat(var.database_subnets, [""]), count.index))
+  ipv4_ipam_pool_id                              = local.use_ipam_database ? local.vpc_ipam_pool_id_for_subnets : null
+  ipv4_netmask_length                            = local.use_ipam_database ? var.database_subnet_ipam_netmask_lengths[count.index] : null
   enable_dns64                                   = var.enable_ipv6 && var.database_subnet_enable_dns64
   enable_resource_name_dns_aaaa_record_on_launch = var.enable_ipv6 && var.database_subnet_enable_resource_name_dns_aaaa_record_on_launch
   enable_resource_name_dns_a_record_on_launch    = !var.database_subnet_ipv6_native && var.database_subnet_enable_resource_name_dns_a_record_on_launch
@@ -634,7 +648,9 @@ resource "aws_subnet" "redshift" {
   assign_ipv6_address_on_creation                = var.enable_ipv6 && var.redshift_subnet_ipv6_native ? true : var.redshift_subnet_assign_ipv6_address_on_creation
   availability_zone                              = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) > 0 ? element(var.azs, count.index) : null
   availability_zone_id                           = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
-  cidr_block                                     = var.redshift_subnet_ipv6_native ? null : element(concat(var.redshift_subnets, [""]), count.index)
+  cidr_block                                     = local.use_ipam_redshift ? null : (var.redshift_subnet_ipv6_native ? null : element(concat(var.redshift_subnets, [""]), count.index))
+  ipv4_ipam_pool_id                              = local.use_ipam_redshift ? local.vpc_ipam_pool_id_for_subnets : null
+  ipv4_netmask_length                            = local.use_ipam_redshift ? var.redshift_subnet_ipam_netmask_lengths[count.index] : null
   enable_dns64                                   = var.enable_ipv6 && var.redshift_subnet_enable_dns64
   enable_resource_name_dns_aaaa_record_on_launch = var.enable_ipv6 && var.redshift_subnet_enable_resource_name_dns_aaaa_record_on_launch
   enable_resource_name_dns_a_record_on_launch    = !var.redshift_subnet_ipv6_native && var.redshift_subnet_enable_resource_name_dns_a_record_on_launch
@@ -787,7 +803,9 @@ resource "aws_subnet" "elasticache" {
   assign_ipv6_address_on_creation                = var.enable_ipv6 && var.elasticache_subnet_ipv6_native ? true : var.elasticache_subnet_assign_ipv6_address_on_creation
   availability_zone                              = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) > 0 ? element(var.azs, count.index) : null
   availability_zone_id                           = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
-  cidr_block                                     = var.elasticache_subnet_ipv6_native ? null : element(concat(var.elasticache_subnets, [""]), count.index)
+  cidr_block                                     = local.use_ipam_elasticache ? null : (var.elasticache_subnet_ipv6_native ? null : element(concat(var.elasticache_subnets, [""]), count.index))
+  ipv4_ipam_pool_id                              = local.use_ipam_elasticache ? local.vpc_ipam_pool_id_for_subnets : null
+  ipv4_netmask_length                            = local.use_ipam_elasticache ? var.elasticache_subnet_ipam_netmask_lengths[count.index] : null
   enable_dns64                                   = var.enable_ipv6 && var.elasticache_subnet_enable_dns64
   enable_resource_name_dns_aaaa_record_on_launch = var.enable_ipv6 && var.elasticache_subnet_enable_resource_name_dns_aaaa_record_on_launch
   enable_resource_name_dns_a_record_on_launch    = !var.elasticache_subnet_ipv6_native && var.elasticache_subnet_enable_resource_name_dns_a_record_on_launch
@@ -931,7 +949,9 @@ resource "aws_subnet" "intra" {
   assign_ipv6_address_on_creation                = var.enable_ipv6 && var.intra_subnet_ipv6_native ? true : var.intra_subnet_assign_ipv6_address_on_creation
   availability_zone                              = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) > 0 ? element(var.azs, count.index) : null
   availability_zone_id                           = length(regexall("^[a-z]{2}-", element(var.azs, count.index))) == 0 ? element(var.azs, count.index) : null
-  cidr_block                                     = var.intra_subnet_ipv6_native ? null : element(concat(var.intra_subnets, [""]), count.index)
+  cidr_block                                     = local.use_ipam_intra ? null : (var.intra_subnet_ipv6_native ? null : element(concat(var.intra_subnets, [""]), count.index))
+  ipv4_ipam_pool_id                              = local.use_ipam_intra ? local.vpc_ipam_pool_id_for_subnets : null
+  ipv4_netmask_length                            = local.use_ipam_intra ? var.intra_subnet_ipam_netmask_lengths[count.index] : null
   enable_dns64                                   = var.enable_ipv6 && var.intra_subnet_enable_dns64
   enable_resource_name_dns_aaaa_record_on_launch = var.enable_ipv6 && var.intra_subnet_enable_resource_name_dns_aaaa_record_on_launch
   enable_resource_name_dns_a_record_on_launch    = !var.intra_subnet_ipv6_native && var.intra_subnet_enable_resource_name_dns_a_record_on_launch
@@ -1540,4 +1560,138 @@ resource "aws_default_route_table" "default" {
     var.tags,
     var.default_route_table_tags,
   )
+}
+
+################################################################################
+# VPC IPAM Pool for Subnet Allocation
+################################################################################
+
+# IPAM Pool for VPC Subnet Planning
+# This creates an IPAM pool scoped to the VPC for subnet allocation
+# Uses native Terraform AWS provider resources (aws_vpc_ipam_pool with source_resource block)
+
+locals {
+  create_vpc_ipam_pool      = local.create_vpc && var.create_vpc_ipam_pool
+  vpc_ipam_pool_description = coalesce(var.vpc_ipam_pool_description, "IPAM pool for ${var.name} VPC subnets")
+  vpc_ipam_pool_name        = coalesce(var.vpc_ipam_pool_name, "${var.name}-vpc-subnets")
+}
+
+# Create VPC-specific IPAM pool using native Terraform resource
+resource "aws_vpc_ipam_pool" "vpc" {
+  count = local.create_vpc_ipam_pool ? 1 : 0
+
+  address_family      = "ipv4"
+  ipam_scope_id       = var.vpc_ipam_scope_id
+  locale              = coalesce(var.vpc_ipam_pool_locale, try(data.aws_region.current[0].id, var.region))
+  source_ipam_pool_id = var.vpc_ipam_source_pool_id
+  description         = local.vpc_ipam_pool_description
+
+  allocation_default_netmask_length = var.vpc_ipam_pool_allocation_default_netmask_length
+  allocation_min_netmask_length     = var.vpc_ipam_pool_allocation_min_netmask_length
+  allocation_max_netmask_length     = var.vpc_ipam_pool_allocation_max_netmask_length
+  auto_import                       = var.vpc_ipam_pool_auto_import
+
+  source_resource {
+    resource_id     = local.vpc_id
+    resource_owner  = data.aws_caller_identity.current[0].account_id
+    resource_region = coalesce(var.vpc_ipam_pool_locale, try(data.aws_region.current[0].id, var.region))
+    resource_type   = "vpc"
+  }
+
+  tags = merge(
+    { "Name" = local.vpc_ipam_pool_name },
+    var.tags,
+    var.vpc_ipam_pool_tags,
+  )
+
+  depends_on = [aws_vpc.this]
+}
+
+# Provision VPC CIDR to the IPAM pool
+resource "aws_vpc_ipam_pool_cidr" "vpc" {
+  count = local.create_vpc_ipam_pool ? 1 : 0
+
+  ipam_pool_id = aws_vpc_ipam_pool.vpc[0].id
+  cidr         = try(aws_vpc.this[0].cidr_block, var.vpc_ipam_pool_cidr)
+
+  depends_on = [aws_vpc_ipam_pool.vpc]
+}
+
+# Data source to retrieve created IPAM pool information
+# This reads the pool ID and ARN from the native Terraform resource
+locals {
+  vpc_ipam_pool_id  = local.create_vpc_ipam_pool ? try(aws_vpc_ipam_pool.vpc[0].id, "") : ""
+  vpc_ipam_pool_arn = local.create_vpc_ipam_pool ? try(aws_vpc_ipam_pool.vpc[0].arn, "") : ""
+
+  # Pool ID for subnet allocation - references the CIDR resource to ensure
+  # the pool has a CIDR provisioned before subnets try to allocate from it
+  vpc_ipam_pool_id_for_subnets = local.create_vpc_ipam_pool ? try(aws_vpc_ipam_pool_cidr.vpc[0].ipam_pool_id, aws_vpc_ipam_pool.vpc[0].id, null) : null
+}
+
+################################################################################
+# RAM Sharing for VPC IPAM Pool
+################################################################################
+
+# Create RAM resource share for IPAM pool
+resource "aws_ram_resource_share" "vpc_ipam_pool" {
+  count = local.create_vpc_ipam_pool && var.vpc_ipam_pool_ram_share_enabled ? 1 : 0
+
+  name                      = coalesce(var.vpc_ipam_pool_ram_share_name, "${var.name}-ipam-pool-share")
+  allow_external_principals = var.vpc_ipam_pool_ram_share_allow_external_principals
+
+  tags = merge(
+    { "Name" = coalesce(var.vpc_ipam_pool_ram_share_name, "${var.name}-ipam-pool-share") },
+    var.tags,
+    var.vpc_ipam_pool_ram_share_tags,
+  )
+}
+
+# Associate IPAM pool with RAM resource share
+resource "aws_ram_resource_association" "vpc_ipam_pool" {
+  count = local.create_vpc_ipam_pool && var.vpc_ipam_pool_ram_share_enabled ? 1 : 0
+
+  resource_arn       = aws_vpc_ipam_pool.vpc[0].arn
+  resource_share_arn = aws_ram_resource_share.vpc_ipam_pool[0].arn
+}
+
+# Associate principals with RAM resource share
+resource "aws_ram_principal_association" "vpc_ipam_pool" {
+  for_each = local.create_vpc_ipam_pool && var.vpc_ipam_pool_ram_share_enabled ? toset(var.vpc_ipam_pool_ram_share_principals) : []
+
+  principal          = each.value
+  resource_share_arn = aws_ram_resource_share.vpc_ipam_pool[0].arn
+}
+
+################################################################################
+# IPAM-Allocated Subnets (DEPRECATED)
+################################################################################
+
+# DEPRECATED: The separate aws_subnet.ipam resource is retained for backward
+# compatibility with the ipam_subnets variable. New usage should prefer the
+# per-subnet-type IPAM variables (e.g., private_subnet_ipv4_ipam_pool_id)
+# which integrate with the existing subnet resources and get all associated
+# resources (route tables, NACLs, NAT routes, subnet groups, etc.) automatically.
+
+locals {
+  create_ipam_subnets = local.create_vpc_ipam_pool && length(var.ipam_subnets) > 0
+}
+
+resource "aws_subnet" "ipam" {
+  for_each = local.create_ipam_subnets ? { for idx, subnet in var.ipam_subnets : idx => subnet } : {}
+
+  vpc_id              = local.vpc_id
+  ipv4_ipam_pool_id   = aws_vpc_ipam_pool.vpc[0].id
+  ipv4_netmask_length = each.value.netmask_length
+  availability_zone   = each.value.availability_zone
+
+  tags = merge(
+    { "Name" = each.value.name },
+    var.tags,
+    lookup(each.value, "tags", {}),
+  )
+
+  depends_on = [
+    aws_vpc_ipam_pool_cidr.vpc,
+    aws_ram_principal_association.vpc_ipam_pool
+  ]
 }
