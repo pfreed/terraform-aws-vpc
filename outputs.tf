@@ -700,5 +700,3 @@ output "vpc_ipam_pool_ram_share_arn" {
   description = "The ARN of the RAM resource share created with aws_ram_resource_share for the VPC IPAM pool"
   value       = try(aws_ram_resource_share.vpc_ipam_pool[0].arn, "")
 }
-
-

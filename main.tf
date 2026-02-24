@@ -1661,5 +1661,3 @@ resource "aws_ram_principal_association" "vpc_ipam_pool" {
   principal          = each.value
   resource_share_arn = aws_ram_resource_share.vpc_ipam_pool[0].arn
 }
-
-
