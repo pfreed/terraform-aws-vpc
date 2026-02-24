@@ -1793,25 +1793,6 @@ variable "vpc_ipam_pool_ram_share_tags" {
 # IPAM-based Subnets (Native Terraform Resources)
 ################################################################################
 
-variable "ipam_subnets" {
-  description = <<-EOT
-    DEPRECATED: Use the per-subnet-type IPAM netmask length variables instead
-    (e.g., public_subnet_ipam_netmask_lengths, private_subnet_ipam_netmask_lengths).
-    This ensures IPAM-allocated subnets get all associated resources (route tables,
-    NACLs, NAT routes, subnet groups, etc.) automatically.
-
-    This variable is retained for backward compatibility but will be removed in a future version.
-  EOT
-  type = list(object({
-    name              = string
-    availability_zone = string
-    netmask_length    = number
-    tags              = optional(map(string), {})
-    aws_profile       = optional(string, "")
-  }))
-  default = []
-}
-
 ################################################################################
 # Per-Subnet-Type IPAM Allocation
 ################################################################################

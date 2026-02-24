@@ -250,9 +250,10 @@ Error: UnauthorizedOperation: You are not authorized to use IPAM pool
 
 | Name | Description |
 |------|-------------|
-| <a name="output_ipam_subnets"></a> [ipam\_subnets](#output\_ipam\_subnets) | Map of IPAM-created subnet IDs (from aws\_subnet resources with ipv4\_ipam\_pool\_id) |
-| <a name="output_ipam_subnets_availability_zones"></a> [ipam\_subnets\_availability\_zones](#output\_ipam\_subnets\_availability\_zones) | Map of IPAM-created subnet availability zones |
-| <a name="output_ipam_subnets_cidr_blocks"></a> [ipam\_subnets\_cidr\_blocks](#output\_ipam\_subnets\_cidr\_blocks) | Map of IPAM-allocated subnet CIDR blocks (automatically allocated based on netmask\_length) |
+| <a name="output_private_subnets"></a> [private\_subnets](#output\_private\_subnets) | List of private subnet IDs (IPAM-allocated) |
+| <a name="output_private_subnets_cidr_blocks"></a> [private\_subnets\_cidr\_blocks](#output\_private\_subnets\_cidr\_blocks) | List of private subnet CIDR blocks (IPAM-allocated) |
+| <a name="output_public_subnets"></a> [public\_subnets](#output\_public\_subnets) | List of public subnet IDs (IPAM-allocated) |
+| <a name="output_public_subnets_cidr_blocks"></a> [public\_subnets\_cidr\_blocks](#output\_public\_subnets\_cidr\_blocks) | List of public subnet CIDR blocks (IPAM-allocated) |
 | <a name="output_top_level_ipam_id"></a> [top\_level\_ipam\_id](#output\_top\_level\_ipam\_id) | The ID of the top-level IPAM instance |
 | <a name="output_top_level_ipam_pool_id"></a> [top\_level\_ipam\_pool\_id](#output\_top\_level\_ipam\_pool\_id) | The ID of the top-level IPAM pool (source pool for VPC-scoped pools) |
 | <a name="output_vpc_cidr_block"></a> [vpc\_cidr\_block](#output\_vpc\_cidr\_block) | The CIDR block of the VPC (allocated from top-level IPAM pool) |

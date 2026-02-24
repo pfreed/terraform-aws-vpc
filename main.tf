@@ -1662,36 +1662,4 @@ resource "aws_ram_principal_association" "vpc_ipam_pool" {
   resource_share_arn = aws_ram_resource_share.vpc_ipam_pool[0].arn
 }
 
-################################################################################
-# IPAM-Allocated Subnets (DEPRECATED)
-################################################################################
 
-# DEPRECATED: The separate aws_subnet.ipam resource is retained for backward
-# compatibility with the ipam_subnets variable. New usage should prefer the
-# per-subnet-type IPAM variables (e.g., private_subnet_ipv4_ipam_pool_id)
-# which integrate with the existing subnet resources and get all associated
-# resources (route tables, NACLs, NAT routes, subnet groups, etc.) automatically.
-
-locals {
-  create_ipam_subnets = local.create_vpc_ipam_pool && length(var.ipam_subnets) > 0
-}
-
-resource "aws_subnet" "ipam" {
-  for_each = local.create_ipam_subnets ? { for idx, subnet in var.ipam_subnets : idx => subnet } : {}
-
-  vpc_id              = local.vpc_id
-  ipv4_ipam_pool_id   = aws_vpc_ipam_pool.vpc[0].id
-  ipv4_netmask_length = each.value.netmask_length
-  availability_zone   = each.value.availability_zone
-
-  tags = merge(
-    { "Name" = each.value.name },
-    var.tags,
-    lookup(each.value, "tags", {}),
-  )
-
-  depends_on = [
-    aws_vpc_ipam_pool_cidr.vpc,
-    aws_ram_principal_association.vpc_ipam_pool
-  ]
-}

@@ -222,7 +222,7 @@ This module supports creating an IPAM pool scoped to the VPC for subnet allocati
 2. **RAM Sharing**: Share the IPAM pool with other AWS accounts via AWS Resource Access Manager using native `aws_ram_resource_share` resources
 3. **Subnet Creation from IPAM Pool**: Create subnets using IPAM pool allocation with native `aws_subnet` resource and `ipv4_ipam_pool_id` parameter
 
-See [IPAM_SUBNET_PLANNING.md](./IPAM_SUBNET_PLANNING.md) for detailed documentation. For cross-account IPAM scenarios, see [Cross-Account IPAM Configuration Guide](./docs/CROSS_ACCOUNT_IPAM.md).
+See the [IPAM VPC Subnets example](./examples/ipam-vpc-subnets/) for detailed usage.
 
 **Prerequisites**: This feature requires Terraform AWS Provider >= 6.29.0 for native support of VPC-scoped IPAM pools and IPAM-allocated subnets.
 
@@ -248,14 +248,10 @@ module "vpc" {
   vpc_ipam_pool_ram_share_enabled    = true
   vpc_ipam_pool_ram_share_principals = ["123456789012"]
 
-  # Create subnets from IPAM pool
-  ipam_subnets = [
-    {
-      name              = "ipam-subnet-1"
-      availability_zone = "eu-west-2a"
-      netmask_length    = 28
-    }
-  ]
+  # Create IPAM-allocated subnets - just specify netmask lengths per type.
+  # CIDRs are automatically allocated from the internal VPC IPAM pool.
+  private_subnet_ipam_netmask_lengths = [28, 28, 28]
+  public_subnet_ipam_netmask_lengths  = [28, 28, 28]
 }
 ```
 
@@ -265,8 +261,7 @@ module "vpc" {
 - [Complete VPC](https://github.com/terraform-aws-modules/terraform-aws-vpc/tree/master/examples/complete) w/ VPC Endpoints
 - [VPC w/ Flow Log](https://github.com/terraform-aws-modules/terraform-aws-vpc/tree/master/examples/flow-log)
 - [VPC using IPAM](https://github.com/terraform-aws-modules/terraform-aws-vpc/tree/master/examples/ipam)
-- [VPC w/ IPAM Pool for Subnet Planning](https://github.com/terraform-aws-modules/terraform-aws-vpc/tree/master/examples/ipam-vpc-subnets) - **NEW**
-- [Cross-Account VPC w/ IPAM Pool](https://github.com/terraform-aws-modules/terraform-aws-vpc/tree/master/examples/ipam-vpc-subnets-cross-account) - **NEW**
+- [VPC w/ IPAM Pool for Subnet Planning](https://github.com/terraform-aws-modules/terraform-aws-vpc/tree/master/examples/ipam-vpc-subnets)
 - [Dualstack IPv4/IPv6 VPC](https://github.com/terraform-aws-modules/terraform-aws-vpc/tree/master/examples/ipv6-dualstack)
 - [IPv6 only subnets VPC](https://github.com/terraform-aws-modules/terraform-aws-vpc/tree/master/examples/ipv6-only)
 - [Manage Default VPC](https://github.com/terraform-aws-modules/terraform-aws-vpc/tree/master/examples/manage-default-vpc)
@@ -317,7 +312,7 @@ Version 6.x of this module modernizes the IPAM implementation by replacing `null
 - Better error messages and validation from the AWS provider
 - Proper resource lifecycle management and drift detection
 
-For detailed information about the IPAM implementation, see [IPAM_SUBNET_PLANNING.md](./IPAM_SUBNET_PLANNING.md).
+For detailed information about the IPAM implementation, see the [IPAM VPC Subnets example](./examples/ipam-vpc-subnets/).
 
 ## Contributing
 
@@ -415,7 +410,6 @@ No modules.
 | [aws_subnet.database](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
 | [aws_subnet.elasticache](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
 | [aws_subnet.intra](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
-| [aws_subnet.ipam](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
 | [aws_subnet.outpost](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
 | [aws_subnet.private](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
 | [aws_subnet.public](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet) | resource |
@@ -571,7 +565,6 @@ No modules.
 | <a name="input_intra_subnet_suffix"></a> [intra\_subnet\_suffix](#input\_intra\_subnet\_suffix) | Suffix to append to intra subnets name | `string` | `"intra"` | no |
 | <a name="input_intra_subnet_tags"></a> [intra\_subnet\_tags](#input\_intra\_subnet\_tags) | Additional tags for the intra subnets | `map(string)` | `{}` | no |
 | <a name="input_intra_subnets"></a> [intra\_subnets](#input\_intra\_subnets) | A list of intra subnets inside the VPC | `list(string)` | `[]` | no |
-| <a name="input_ipam_subnets"></a> [ipam\_subnets](#input\_ipam\_subnets) | List of subnets to create using IPAM pool allocation with native aws\_subnet resources. Each subnet should have:<br/>- name: Name tag for the subnet<br/>- availability\_zone: AZ where the subnet will be created<br/>- netmask\_length: The netmask length for the subnet (e.g., 24 for /24)<br/>- tags: (Optional) Additional tags for the subnet<br/><br/>Subnets are created using aws\_subnet resource with ipv4\_ipam\_pool\_id parameter for automatic CIDR allocation.<br/><br/>Example:<br/>[<br/>  {<br/>    name              = "ipam-subnet-1"<br/>    availability\_zone = "eu-west-2a"<br/>    netmask\_length    = 28<br/>    tags              = { Environment = "dev" }<br/>  }<br/>] | <pre>list(object({<br/>    name              = string<br/>    availability_zone = string<br/>    netmask_length    = number<br/>    tags              = optional(map(string), {})<br/>    aws_profile       = optional(string, "")<br/>  }))</pre> | `[]` | no |
 | <a name="input_ipv4_ipam_pool_id"></a> [ipv4\_ipam\_pool\_id](#input\_ipv4\_ipam\_pool\_id) | (Optional) The ID of an IPv4 IPAM pool you want to use for allocating this VPC's CIDR | `string` | `null` | no |
 | <a name="input_ipv4_netmask_length"></a> [ipv4\_netmask\_length](#input\_ipv4\_netmask\_length) | (Optional) The netmask length of the IPv4 CIDR you want to allocate to this VPC. Requires specifying a ipv4\_ipam\_pool\_id | `number` | `null` | no |
 | <a name="input_ipv6_cidr"></a> [ipv6\_cidr](#input\_ipv6\_cidr) | (Optional) IPv6 CIDR block to request from an IPAM Pool. Can be set explicitly or derived from IPAM using `ipv6_netmask_length` | `string` | `null` | no |
@@ -756,11 +749,6 @@ No modules.
 | <a name="output_intra_subnets"></a> [intra\_subnets](#output\_intra\_subnets) | List of IDs of intra subnets |
 | <a name="output_intra_subnets_cidr_blocks"></a> [intra\_subnets\_cidr\_blocks](#output\_intra\_subnets\_cidr\_blocks) | List of cidr\_blocks of intra subnets |
 | <a name="output_intra_subnets_ipv6_cidr_blocks"></a> [intra\_subnets\_ipv6\_cidr\_blocks](#output\_intra\_subnets\_ipv6\_cidr\_blocks) | List of IPv6 cidr\_blocks of intra subnets in an IPv6 enabled VPC |
-| <a name="output_ipam_subnet_objects"></a> [ipam\_subnet\_objects](#output\_ipam\_subnet\_objects) | Full objects of all IPAM-created subnets using native aws\_subnet resources |
-| <a name="output_ipam_subnets"></a> [ipam\_subnets](#output\_ipam\_subnets) | Map of IPAM-created subnet IDs from aws\_subnet resources with ipv4\_ipam\_pool\_id |
-| <a name="output_ipam_subnets_arns"></a> [ipam\_subnets\_arns](#output\_ipam\_subnets\_arns) | Map of IPAM-created subnet ARNs from aws\_subnet resources |
-| <a name="output_ipam_subnets_availability_zones"></a> [ipam\_subnets\_availability\_zones](#output\_ipam\_subnets\_availability\_zones) | Map of IPAM-created subnet availability zones from aws\_subnet resources |
-| <a name="output_ipam_subnets_cidr_blocks"></a> [ipam\_subnets\_cidr\_blocks](#output\_ipam\_subnets\_cidr\_blocks) | Map of IPAM-allocated subnet CIDR blocks from aws\_subnet resources |
 | <a name="output_name"></a> [name](#output\_name) | The name of the VPC specified as argument to this module |
 | <a name="output_nat_ids"></a> [nat\_ids](#output\_nat\_ids) | List of allocation ID of Elastic IPs created for AWS NAT Gateway |
 | <a name="output_nat_public_ips"></a> [nat\_public\_ips](#output\_nat\_public\_ips) | List of public Elastic IPs created for AWS NAT Gateway |
